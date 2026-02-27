@@ -1,274 +1,305 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import {
-  initialStudents, initialAdvisors, initialAppointments, initialMessages,
-  type Student, type Advisor, type Appointment, type Session, type Message, type MessageReply,
-} from '@/utils/mockData';
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import { apiFetch } from '@/utils/api';
+import type { Student, Advisor, Appointment, Session, Message, MessageReply } from '@/utils/mockData';
 
 interface DataContextType {
   students: Student[];
   advisors: Advisor[];
   appointments: Appointment[];
   messages: Message[];
-  addStudent: (s: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>) => void;
-  updateStudent: (id: string, data: Partial<Student>) => void;
-  deleteStudent: (id: string) => void;
-  importStudents: (list: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>[]) => void;
-  addAdvisor: (a: Omit<Advisor, 'id' | 'role' | 'availability'>) => void;
-  updateAdvisor: (id: string, data: Partial<Advisor>) => void;
-  deleteAdvisor: (id: string) => void;
-  updateAvailability: (advisorId: string, availability: Advisor['availability']) => void;
-  addAppointment: (a: Omit<Appointment, 'id' | 'createdAt'>) => void;
-  updateAppointmentStatus: (id: string, status: Appointment['status'], rejectionReason?: string) => void;
-  deleteAppointment: (id: string) => void;
-  addSession: (studentId: string, session: Omit<Session, 'id'>) => void;
+  loading: boolean;
+  refreshAll: () => Promise<void>;
+  addStudent: (s: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>) => Promise<void>;
+  updateStudent: (id: string, data: Partial<Student>) => Promise<void>;
+  deleteStudent: (id: string) => Promise<void>;
+  importStudents: (list: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>[]) => Promise<void>;
+  addAdvisor: (a: Omit<Advisor, 'id' | 'role' | 'availability'>) => Promise<void>;
+  updateAdvisor: (id: string, data: Partial<Advisor>) => Promise<void>;
+  deleteAdvisor: (id: string) => Promise<void>;
+  updateAvailability: (advisorId: string, availability: Advisor['availability']) => Promise<void>;
+  addAppointment: (a: Omit<Appointment, 'id' | 'createdAt'>) => Promise<void>;
+  updateAppointmentStatus: (id: string, status: Appointment['status'], rejectionReason?: string) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
+  addSession: (studentId: string, session: Omit<Session, 'id'>) => Promise<void>;
   getStudentsByAdvisor: (advisorId: string) => Student[];
   getAppointmentsByAdvisor: (advisorId: string) => Appointment[];
   getAppointmentsByStudent: (studentId: string) => Appointment[];
-  // Message functions
-  sendMessage: (msg: Omit<Message, 'id' | 'createdAt' | 'isRead' | 'replies'>) => void;
-  replyToMessage: (messageId: string, reply: Omit<MessageReply, 'id' | 'createdAt'>) => void;
+  sendMessage: (msg: Omit<Message, 'id' | 'createdAt' | 'isRead' | 'replies'>) => Promise<void>;
+  replyToMessage: (messageId: string, reply: Omit<MessageReply, 'id' | 'createdAt'>) => Promise<void>;
   getMessagesByUser: (userId: string) => Message[];
   getMessagesByDepartment: (department: string) => Message[];
-  markMessageAsRead: (messageId: string) => void;
+  markMessageAsRead: (messageId: string) => Promise<void>;
   getUnreadCount: (userId: string) => number;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
 
-function loadFromStorage<T>(key: string, fallback: T): T {
-  const stored = localStorage.getItem(key);
-  return stored ? JSON.parse(stored) : fallback;
+function mapStudent(s: any): Student {
+  return {
+    id: s.id,
+    firstName: s.firstName,
+    lastName: s.lastName,
+    username: s.username,
+    password: '',
+    studentNumber: s.studentNumber,
+    gpa: s.gpa,
+    phoneNumber: s.phoneNumber,
+    advisorId: s.advisorId,
+    advisorName: s.advisorName,
+    semester: s.semester,
+    totalSessions: s.totalSessions,
+    role: 'student',
+    studentType: s.studentType,
+    sessions: s.sessions || [],
+  };
 }
 
-function saveToStorage(key: string, data: unknown) {
-  localStorage.setItem(key, JSON.stringify(data));
+function mapAdvisor(a: any): Advisor {
+  return {
+    id: a.id,
+    firstName: a.firstName,
+    lastName: a.lastName,
+    username: a.username,
+    password: '',
+    role: 'advisor',
+    specialty: a.specialty,
+    faculty: a.faculty,
+    availability: a.availability || [],
+  };
+}
+
+function mapAppointment(a: any): Appointment {
+  return {
+    id: a.id,
+    studentId: a.studentId,
+    advisorId: a.advisorId,
+    date: a.date,
+    time: a.time,
+    appointmentType: a.appointmentType,
+    status: a.status,
+    description: a.description,
+    rejectionReason: a.rejectionReason,
+    createdAt: a.createdAt,
+  };
+}
+
+function mapMessage(m: any): Message {
+  return {
+    id: m.id,
+    senderId: m.senderId,
+    senderName: m.senderName,
+    senderRole: m.senderRole,
+    receiverId: m.receiverId,
+    receiverName: m.receiverName,
+    receiverRole: m.receiverRole,
+    department: m.department,
+    subject: m.subject,
+    body: m.body,
+    isRead: m.isRead,
+    createdAt: m.createdAt,
+    replies: m.replies || [],
+  };
 }
 
 export function DataProvider({ children }: { children: ReactNode }) {
-  const [students, setStudents] = useState<Student[]>(() => loadFromStorage('students', initialStudents));
-  const [advisors, setAdvisors] = useState<Advisor[]>(() => loadFromStorage('advisors', initialAdvisors));
-  const [appointments, setAppointments] = useState<Appointment[]>(() => loadFromStorage('appointments', initialAppointments));
-  const [messages, setMessages] = useState<Message[]>(() => loadFromStorage('messages', initialMessages));
+  const [students, setStudents]           = useState<Student[]>([]);
+  const [advisors, setAdvisors]           = useState<Advisor[]>([]);
+  const [appointments, setAppointments]   = useState<Appointment[]>([]);
+  const [messages, setMessages]           = useState<Message[]>([]);
+  const [loading, setLoading]             = useState(true);
 
-  const persist = useCallback((key: string, data: unknown) => saveToStorage(key, data), []);
+  const refreshAll = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) { setLoading(false); return; }
+      const [s, a, ap] = await Promise.all([
+        apiFetch<any[]>('/students'),
+        apiFetch<any[]>('/advisors'),
+        apiFetch<any[]>('/appointments'),
+      ]);
+      setStudents(s.map(mapStudent));
+      setAdvisors(a.map(mapAdvisor));
+      setAppointments(ap.map(mapAppointment));
+    } catch (e) {
+      console.error('refreshAll error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const addStudent = useCallback((s: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>) => {
-    setStudents(prev => {
-      const newStudent: Student = {
-        ...s,
-        id: `student_${Date.now()}`,
-        role: 'student',
-        sessions: [],
-        totalSessions: 0,
-      };
-      const next = [...prev, newStudent];
-      persist('students', next);
-      return next;
+  useEffect(() => { refreshAll(); }, [refreshAll]);
+
+  // ─── Students ────────────────────────────────────────
+  const addStudent = useCallback(async (s: any) => {
+    const res = await apiFetch<any>('/students', {
+      method: 'POST',
+      body: JSON.stringify({
+        first_name: s.firstName, last_name: s.lastName,
+        username: s.username, password: s.password,
+        student_number: s.studentNumber, gpa: s.gpa,
+        phone_number: s.phoneNumber, advisor_id: s.advisorId,
+        semester: s.semester, student_type: s.studentType || 'normal',
+      }),
     });
-  }, [persist]);
+    setStudents(prev => [...prev, mapStudent(res)]);
+  }, []);
 
-  const updateStudent = useCallback((id: string, data: Partial<Student>) => {
-    setStudents(prev => {
-      const next = prev.map(s => s.id === id ? { ...s, ...data } : s);
-      persist('students', next);
-      return next;
+  const updateStudent = useCallback(async (id: string, data: Partial<Student>) => {
+    const res = await apiFetch<any>(`/students/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        first_name: data.firstName, last_name: data.lastName,
+        gpa: data.gpa, phone_number: data.phoneNumber,
+        advisor_id: data.advisorId, semester: data.semester,
+        student_type: data.studentType, password: (data as any).password,
+      }),
     });
-  }, [persist]);
+    setStudents(prev => prev.map(s => s.id === id ? mapStudent(res) : s));
+  }, []);
 
-  const deleteStudent = useCallback((id: string) => {
-    setStudents(prev => {
-      const next = prev.filter(s => s.id !== id);
-      persist('students', next);
-      return next;
+  const deleteStudent = useCallback(async (id: string) => {
+    await apiFetch(`/students/${id}`, { method: 'DELETE' });
+    setStudents(prev => prev.filter(s => s.id !== id));
+    setAppointments(prev => prev.filter(a => a.studentId !== id));
+  }, []);
+
+  const importStudents = useCallback(async (list: any[]) => {
+    await apiFetch('/students/import', {
+      method: 'POST',
+      body: JSON.stringify(list.map(s => ({
+        first_name: s.firstName, last_name: s.lastName,
+        username: s.username, password: s.password,
+        student_number: s.studentNumber, gpa: s.gpa,
+        phone_number: s.phoneNumber, advisor_id: s.advisorId,
+        semester: s.semester, student_type: s.studentType || 'normal',
+      }))),
     });
-    setAppointments(prev => {
-      const next = prev.filter(a => a.studentId !== id);
-      persist('appointments', next);
-      return next;
+    await refreshAll();
+  }, [refreshAll]);
+
+  // ─── Advisors ────────────────────────────────────────
+  const addAdvisor = useCallback(async (a: any) => {
+    const res = await apiFetch<any>('/advisors', {
+      method: 'POST',
+      body: JSON.stringify({
+        first_name: a.firstName, last_name: a.lastName,
+        username: a.username, password: a.password,
+        specialty: a.specialty, faculty: a.faculty,
+      }),
     });
-  }, [persist]);
+    setAdvisors(prev => [...prev, mapAdvisor(res)]);
+  }, []);
 
-  const importStudents = useCallback((list: Omit<Student, 'id' | 'role' | 'sessions' | 'totalSessions'>[]) => {
-    setStudents(prev => {
-      const newStudents = list.map((s, i) => ({
-        ...s,
-        id: `student_import_${Date.now()}_${i}`,
-        role: 'student' as const,
-        sessions: [],
-        totalSessions: 0,
-      }));
-      const next = [...prev, ...newStudents];
-      persist('students', next);
-      return next;
+  const updateAdvisor = useCallback(async (id: string, data: Partial<Advisor>) => {
+    const res = await apiFetch<any>(`/advisors/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        first_name: data.firstName, last_name: data.lastName,
+        specialty: data.specialty, faculty: data.faculty,
+      }),
     });
-  }, [persist]);
+    setAdvisors(prev => prev.map(a => a.id === id ? mapAdvisor(res) : a));
+  }, []);
 
-  const addAdvisor = useCallback((a: Omit<Advisor, 'id' | 'role' | 'availability'>) => {
-    const days = ["شنبه", "یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه"];
-    const defaultSlots = [
-      { time: "08:00-09:00", available: true },
-      { time: "09:00-10:00", available: true },
-      { time: "10:00-11:00", available: true },
-      { time: "11:00-12:00", available: true },
-      { time: "13:00-14:00", available: true },
-      { time: "14:00-15:00", available: true },
-      { time: "15:00-16:00", available: false },
-      { time: "16:00-17:00", available: false },
-    ];
-    setAdvisors(prev => {
-      const newAdvisor: Advisor = {
-        ...a,
-        id: `advisor_${Date.now()}`,
-        role: 'advisor',
-        availability: days.map(day => ({ day, slots: defaultSlots.map(s => ({ ...s })) })),
-      };
-      const next = [...prev, newAdvisor];
-      persist('advisors', next);
-      return next;
+  const deleteAdvisor = useCallback(async (id: string) => {
+    await apiFetch(`/advisors/${id}`, { method: 'DELETE' });
+    setAdvisors(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const updateAvailability = useCallback(async (advisorId: string, availability: Advisor['availability']) => {
+    const res = await apiFetch<any>(`/advisors/${advisorId}/availability`, {
+      method: 'PUT',
+      body: JSON.stringify({ availability }),
     });
-  }, [persist]);
+    setAdvisors(prev => prev.map(a => a.id === advisorId ? mapAdvisor(res) : a));
+  }, []);
 
-  const updateAdvisor = useCallback((id: string, data: Partial<Advisor>) => {
-    setAdvisors(prev => {
-      const next = prev.map(a => a.id === id ? { ...a, ...data } : a);
-      persist('advisors', next);
-      return next;
+  // ─── Appointments ─────────────────────────────────────
+  const addAppointment = useCallback(async (a: any) => {
+    const res = await apiFetch<any>('/appointments', {
+      method: 'POST',
+      body: JSON.stringify({
+        student_id: a.studentId, advisor_id: a.advisorId,
+        date: a.date, time: a.time,
+        appointment_type: a.appointmentType, description: a.description,
+      }),
     });
-  }, [persist]);
+    setAppointments(prev => [...prev, mapAppointment(res)]);
+  }, []);
 
-  const deleteAdvisor = useCallback((id: string) => {
-    setAdvisors(prev => {
-      const next = prev.filter(a => a.id !== id);
-      persist('advisors', next);
-      return next;
+  const updateAppointmentStatus = useCallback(async (id: string, status: Appointment['status'], rejectionReason?: string) => {
+    const res = await apiFetch<any>(`/appointments/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status, rejection_reason: rejectionReason }),
     });
-  }, [persist]);
+    setAppointments(prev => prev.map(a => a.id === id ? mapAppointment(res) : a));
+  }, []);
 
-  const updateAvailability = useCallback((advisorId: string, availability: Advisor['availability']) => {
-    setAdvisors(prev => {
-      const next = prev.map(a => a.id === advisorId ? { ...a, availability } : a);
-      persist('advisors', next);
-      return next;
+  const deleteAppointment = useCallback(async (id: string) => {
+    await apiFetch(`/appointments/${id}`, { method: 'DELETE' });
+    setAppointments(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  // ─── Sessions ─────────────────────────────────────────
+  const addSession = useCallback(async (studentId: string, session: Omit<Session, 'id'>) => {
+    const res = await apiFetch<any>(`/students/${studentId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(session),
     });
-  }, [persist]);
+    setStudents(prev => prev.map(s => {
+      if (s.id !== studentId) return s;
+      return { ...s, sessions: [...s.sessions, res], totalSessions: s.totalSessions + 1 };
+    }));
+  }, []);
 
-  const addAppointment = useCallback((a: Omit<Appointment, 'id' | 'createdAt'>) => {
-    setAppointments(prev => {
-      const newApt: Appointment = {
-        ...a,
-        id: `apt_${Date.now()}`,
-        createdAt: new Date().toISOString(),
-      };
-      const next = [...prev, newApt];
-      persist('appointments', next);
-      return next;
+  // ─── Messages ─────────────────────────────────────────
+  const sendMessage = useCallback(async (msg: any) => {
+    const res = await apiFetch<any>('/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        sender_id: msg.senderId, sender_name: msg.senderName,
+        sender_role: msg.senderRole, receiver_id: msg.receiverId,
+        receiver_name: msg.receiverName, receiver_role: msg.receiverRole,
+        department: msg.department, subject: msg.subject, body: msg.body,
+      }),
     });
-  }, [persist]);
+    setMessages(prev => [...prev, mapMessage(res)]);
+  }, []);
 
-  const updateAppointmentStatus = useCallback((id: string, status: Appointment['status'], rejectionReason?: string) => {
-    setAppointments(prev => {
-      const next = prev.map(a => a.id === id ? { ...a, status, ...(rejectionReason ? { rejectionReason } : {}) } : a);
-      persist('appointments', next);
-      return next;
+  const replyToMessage = useCallback(async (messageId: string, reply: any) => {
+    const res = await apiFetch<any>(`/messages/${messageId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({
+        sender_id: reply.senderId, sender_name: reply.senderName,
+        sender_role: reply.senderRole, body: reply.body,
+      }),
     });
-  }, [persist]);
+    setMessages(prev => prev.map(m => m.id === messageId ? mapMessage(res) : m));
+  }, []);
 
-  const deleteAppointment = useCallback((id: string) => {
-    setAppointments(prev => {
-      const next = prev.filter(a => a.id !== id);
-      persist('appointments', next);
-      return next;
-    });
-  }, [persist]);
+  const markMessageAsRead = useCallback(async (messageId: string) => {
+    await apiFetch(`/messages/${messageId}/read`, { method: 'PUT' });
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true } : m));
+  }, []);
 
-  const addSession = useCallback((studentId: string, session: Omit<Session, 'id'>) => {
-    setStudents(prev => {
-      const next = prev.map(s => {
-        if (s.id === studentId) {
-          const newSession: Session = { ...session, id: `session_${Date.now()}` };
-          return { ...s, sessions: [...s.sessions, newSession], totalSessions: s.totalSessions + 1 };
-        }
-        return s;
-      });
-      persist('students', next);
-      return next;
-    });
-  }, [persist]);
-
-  const getStudentsByAdvisor = useCallback((advisorId: string) => {
-    return students.filter(s => s.advisorId === advisorId);
-  }, [students]);
-
-  const getAppointmentsByAdvisor = useCallback((advisorId: string) => {
-    return appointments.filter(a => a.advisorId === advisorId);
-  }, [appointments]);
-
-  const getAppointmentsByStudent = useCallback((studentId: string) => {
-    return appointments.filter(a => a.studentId === studentId);
-  }, [appointments]);
-
-  // === Message Functions ===
-  const sendMessage = useCallback((msg: Omit<Message, 'id' | 'createdAt' | 'isRead' | 'replies'>) => {
-    setMessages(prev => {
-      const newMsg: Message = {
-        ...msg,
-        id: `msg_${Date.now()}`,
-        isRead: false,
-        createdAt: new Date().toISOString(),
-        replies: [],
-      };
-      const next = [...prev, newMsg];
-      persist('messages', next);
-      return next;
-    });
-  }, [persist]);
-
-  const replyToMessage = useCallback((messageId: string, reply: Omit<MessageReply, 'id' | 'createdAt'>) => {
-    setMessages(prev => {
-      const next = prev.map(m => {
-        if (m.id === messageId) {
-          const newReply: MessageReply = {
-            ...reply,
-            id: `reply_${Date.now()}`,
-            createdAt: new Date().toISOString(),
-          };
-          return { ...m, replies: [...m.replies, newReply] };
-        }
-        return m;
-      });
-      persist('messages', next);
-      return next;
-    });
-  }, [persist]);
-
-  const getMessagesByUser = useCallback((userId: string) => {
-    return messages.filter(m => m.senderId === userId || m.receiverId === userId);
-  }, [messages]);
-
-  const getMessagesByDepartment = useCallback((department: string) => {
-    return messages.filter(m => m.department === department);
-  }, [messages]);
-
-  const markMessageAsRead = useCallback((messageId: string) => {
-    setMessages(prev => {
-      const next = prev.map(m => m.id === messageId ? { ...m, isRead: true } : m);
-      persist('messages', next);
-      return next;
-    });
-  }, [persist]);
-
-  const getUnreadCount = useCallback((userId: string) => {
-    return messages.filter(m => (m.receiverId === userId || m.senderId === userId) && !m.isRead).length;
-  }, [messages]);
+  // ─── Local Getters ────────────────────────────────────
+  const getStudentsByAdvisor     = useCallback((id: string) => students.filter(s => s.advisorId === id), [students]);
+  const getAppointmentsByAdvisor = useCallback((id: string) => appointments.filter(a => a.advisorId === id), [appointments]);
+  const getAppointmentsByStudent = useCallback((id: string) => appointments.filter(a => a.studentId === id), [appointments]);
+  const getMessagesByUser        = useCallback((id: string) => messages.filter(m => m.senderId === id || m.receiverId === id), [messages]);
+  const getMessagesByDepartment  = useCallback((dept: string) => messages.filter(m => m.department === dept), [messages]);
+  const getUnreadCount           = useCallback((id: string) => messages.filter(m => (m.receiverId === id || m.senderId === id) && !m.isRead).length, [messages]);
 
   return (
     <DataContext.Provider value={{
-      students, advisors, appointments, messages,
+      students, advisors, appointments, messages, loading, refreshAll,
       addStudent, updateStudent, deleteStudent, importStudents,
       addAdvisor, updateAdvisor, deleteAdvisor, updateAvailability,
       addAppointment, updateAppointmentStatus, deleteAppointment,
-      addSession, getStudentsByAdvisor, getAppointmentsByAdvisor, getAppointmentsByStudent,
-      sendMessage, replyToMessage, getMessagesByUser, getMessagesByDepartment, markMessageAsRead, getUnreadCount,
+      addSession,
+      getStudentsByAdvisor, getAppointmentsByAdvisor, getAppointmentsByStudent,
+      sendMessage, replyToMessage, getMessagesByUser, getMessagesByDepartment,
+      markMessageAsRead, getUnreadCount,
     }}>
       {children}
     </DataContext.Provider>

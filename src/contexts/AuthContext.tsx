@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { initialAdmins, initialAdvisors, initialStudents, initialSpecialRoles, type Admin, type Advisor, type Student, type SpecialRole } from '@/utils/mockData';
+import { apiFetch } from '@/utils/api';
+import type { Admin, Advisor, Student, SpecialRole } from '@/utils/mockData';
 
 type User = Admin | Advisor | Student | SpecialRole;
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => { success: boolean; message: string };
+  login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -18,49 +19,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const login = useCallback((username: string, password: string) => {
-    // Check admin
-    const admin = initialAdmins.find(a => a.username === username && a.password === password);
-    if (admin) {
-      setUser(admin);
-      localStorage.setItem('currentUser', JSON.stringify(admin));
-      return { success: true, message: 'ورود موفق' };
-    }
+  const login = useCallback(async (username: string, password: string) => {
+    try {
+      const data = await apiFetch<{ access_token: string; user: any }>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      });
 
-    // Check special roles
-    const specialUser = initialSpecialRoles.find(s => s.username === username && s.password === password);
-    if (specialUser) {
-      setUser(specialUser);
-      localStorage.setItem('currentUser', JSON.stringify(specialUser));
-      return { success: true, message: 'ورود موفق' };
-    }
+      localStorage.setItem('token', data.access_token);
 
-    // Check advisors
-    const storedAdvisors = localStorage.getItem('advisors');
-    const advisors: Advisor[] = storedAdvisors ? JSON.parse(storedAdvisors) : initialAdvisors;
-    const advisor = advisors.find(a => a.username === username && a.password === password);
-    if (advisor) {
-      setUser(advisor);
-      localStorage.setItem('currentUser', JSON.stringify(advisor));
-      return { success: true, message: 'ورود موفق' };
-    }
+      const mappedUser = {
+        id: data.user.id,
+        username: data.user.username,
+        role: data.user.role,
+        firstName: data.user.first_name,
+        lastName: data.user.last_name,
+        advisorId: data.user.advisor_id,
+        studentNumber: data.user.student_number,
+        title: data.user.title,
+        password: '',
+      } as unknown as User;
 
-    // Check students
-    const storedStudents = localStorage.getItem('students');
-    const students: Student[] = storedStudents ? JSON.parse(storedStudents) : initialStudents;
-    const student = students.find(s => (s.username === username || s.studentNumber === username) && s.password === password);
-    if (student) {
-      setUser(student);
-      localStorage.setItem('currentUser', JSON.stringify(student));
+      setUser(mappedUser);
+      localStorage.setItem('currentUser', JSON.stringify(mappedUser));
       return { success: true, message: 'ورود موفق' };
+    } catch (e: any) {
+      return { success: false, message: e?.detail || 'نام کاربری یا رمز عبور اشتباه است' };
     }
-
-    return { success: false, message: 'نام کاربری یا رمز عبور اشتباه است' };
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('currentUser');
+    localStorage.removeItem('token');
   }, []);
 
   return (

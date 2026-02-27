@@ -26,8 +26,7 @@ export default function Login() {
     e.preventDefault();
     if (!username || !password) { showToast('لطفاً نام کاربری و رمز عبور را وارد کنید', 'warning'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    const result = login(username, password);
+    const result = await login(username, password);
     setLoading(false);
     if (result.success) {
       showToast('ورود موفقیت‌آمیز بود', 'success');
@@ -38,8 +37,7 @@ export default function Login() {
 
   const handleQuickLogin = async (u: string, p: string) => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 500));
-    const result = login(u, p);
+    const result = await login(u, p);
     setLoading(false);
     if (result.success) {
       showToast('ورود موفقیت‌آمیز بود', 'success');
