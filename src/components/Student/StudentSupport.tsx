@@ -1,3 +1,4 @@
+import { storage } from '@/utils/storage';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +29,7 @@ export default function StudentSupport() {
 
   // Load tickets from localStorage
   const [tickets, setTickets] = useState<SupportTicket[]>(() => {
-    const saved = localStorage.getItem(`support_tickets_${user?.id}`);
+    const saved = storage.getItem(`support_tickets_${user?.id}`);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -69,7 +70,7 @@ export default function StudentSupport() {
 
     const updated = [...tickets, newTicket];
     setTickets(updated);
-    localStorage.setItem(`support_tickets_${user?.id}`, JSON.stringify(updated));
+    storage.setItem(`support_tickets_${user?.id}`, JSON.stringify(updated));
 
     showToast('تیکت پشتیبانی با موفقیت ثبت شد', 'success');
 

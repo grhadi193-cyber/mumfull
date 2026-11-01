@@ -1,5 +1,7 @@
+import { storage } from '@/utils/storage';
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import { apiFetch } from '@/utils/api';
+import { initialAdmins, initialAdvisors, initialStudents, initialSpecialRoles } from '@/utils/mockData';
 import type { Admin, Advisor, Student, SpecialRole } from '@/utils/mockData';
 
 type User = Admin | Advisor | Student | SpecialRole;
@@ -7,6 +9,8 @@ type User = Admin | Advisor | Student | SpecialRole;
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<{ success: boolean; message: string }>;
+  loginDemo: (username: string) => void;
+  isDemo: boolean;
   logout: () => void;
   isAuthenticated: boolean;
 }
@@ -15,9 +19,17 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('currentUser');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = storage.getItem('currentUser');
+      const parsed = saved ? JSON.parse(saved) : null;
+      const roles = ['admin', 'advisor', 'student', 'counseling_center', 'education_admin', 'advisor_supervisor', 'department_head'];
+      if (parsed && typeof parsed.id === 'string' && roles.includes(parsed.role) &&
+          (storage.getItem('authMode') === 'demo' || storage.getItem('token'))) return parsed as User;
+    } catch { /* Ignore invalid or outdated stored sessions. */ }
+    return null;
   });
+
+  const [isDemo, setIsDemo] = useState(() => storage.getItem('authMode') === 'demo');
 
   const login = useCallback(async (username: string, password: string) => {
     try {
@@ -26,7 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ username, password }),
       });
 
-      localStorage.setItem('token', data.access_token);
+      storage.setItem('token', data.access_token);
+      storage.removeItem('authMode');
+      setIsDemo(false);
 
       const mappedUser = {
         id: data.user.id,
@@ -41,21 +55,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } as unknown as User;
 
       setUser(mappedUser);
-      localStorage.setItem('currentUser', JSON.stringify(mappedUser));
+      storage.setItem('currentUser', JSON.stringify(mappedUser));
       return { success: true, message: 'ورود موفق' };
     } catch (e: any) {
-      return { success: false, message: e?.detail || 'نام کاربری یا رمز عبور اشتباه است' };
+      return { success: false, message: typeof e?.detail === 'string' ? e.detail : 'اتصال به سرور برقرار نشد. لطفاً اتصال و تنظیمات سرور را بررسی کنید.' };
     }
+  }, []);
+
+  const loginDemo = useCallback((username: string) => {
+    const demoUser = [...initialAdmins, ...initialAdvisors, ...initialStudents, ...initialSpecialRoles]
+      .find(account => account.username === username);
+    if (!demoUser) return;
+    const userWithoutPassword = { ...demoUser, password: '' };
+    storage.removeItem('token');
+    storage.setItem('authMode', 'demo');
+    storage.setItem('currentUser', JSON.stringify(userWithoutPassword));
+    setIsDemo(true);
+    setUser(userWithoutPassword);
   }, []);
 
   const logout = useCallback(() => {
     setUser(null);
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('token');
+    storage.removeItem('currentUser');
+    storage.removeItem('token');
+    storage.removeItem('authMode');
+    setIsDemo(false);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, loginDemo, isDemo, logout, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,3 +1,4 @@
+import { storage } from '@/utils/storage';
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,7 +53,7 @@ export default function SharedSession() {
 
   // Load shared sessions from localStorage
   const [sharedSessions, setSharedSessions] = useState<SharedSessionRecord[]>(() => {
-    const saved = localStorage.getItem(`shared_sessions_${user?.id}`);
+    const saved = storage.getItem(`shared_sessions_${user?.id}`);
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -92,7 +93,7 @@ export default function SharedSession() {
 
     const updated = [...sharedSessions, newSession];
     setSharedSessions(updated);
-    localStorage.setItem(`shared_sessions_${user?.id}`, JSON.stringify(updated));
+    storage.setItem(`shared_sessions_${user?.id}`, JSON.stringify(updated));
 
     showToast('اطلاعات جلسه برای استاد مشاور ارسال شد', 'success');
 
