@@ -1,5 +1,8 @@
+import { storage } from '@/utils/storage';
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import { apiFetch } from '@/utils/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { initialStudents, initialAdvisors, initialAppointments, initialMessages } from '@/utils/mockData';
 import type { Student, Advisor, Appointment, Session, Message, MessageReply } from '@/utils/mockData';
 
 interface DataContextType {
@@ -102,6 +105,13 @@ function mapMessage(m: any): Message {
 }
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { isDemo, isAuthenticated } = useAuth();
+  return isDemo && isAuthenticated
+    ? <DemoDataProvider>{children}</DemoDataProvider>
+    : <ApiDataProvider key={String(isAuthenticated)}>{children}</ApiDataProvider>;
+}
+
+function ApiDataProvider({ children }: { children: ReactNode }) {
   const [students, setStudents]           = useState<Student[]>([]);
   const [advisors, setAdvisors]           = useState<Advisor[]>([]);
   const [appointments, setAppointments]   = useState<Appointment[]>([]);
@@ -110,7 +120,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const refreshAll = useCallback(async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = storage.getItem('token');
       if (!token) { setLoading(false); return; }
       const [s, a, ap] = await Promise.all([
         apiFetch<any[]>('/students'),
@@ -304,6 +314,62 @@ export function DataProvider({ children }: { children: ReactNode }) {
       {children}
     </DataContext.Provider>
   );
+}
+
+
+// Demo data stays in this browser and is never sent to a real API.
+function useDemoState<T>(key: string, initial: T): [T, React.Dispatch<React.SetStateAction<T>>] {
+  const [value, setValue] = useState<T>(() => {
+    try {
+      const stored = storage.getItem(key);
+      return stored ? JSON.parse(stored) : structuredClone(initial);
+    } catch {
+      return structuredClone(initial);
+    }
+  });
+  useEffect(() => { storage.setItem(key, JSON.stringify(value)); }, [key, value]);
+  return [value, setValue];
+}
+
+function DemoDataProvider({ children }: { children: ReactNode }) {
+  const [students, setStudents] = useDemoState('demoStudents', initialStudents);
+  const [advisors, setAdvisors] = useDemoState('demoAdvisors', initialAdvisors);
+  const [appointments, setAppointments] = useDemoState('demoAppointments', initialAppointments);
+  const [messages, setMessages] = useDemoState('demoMessages', initialMessages);
+  const id = () => crypto.randomUUID();
+  const now = () => new Date().toISOString();
+
+  const value: DataContextType = {
+    students, advisors, appointments, messages, loading: false,
+    refreshAll: async () => {},
+    addStudent: async s => { setStudents(prev => [...prev, { ...s, id: id(), role: 'student', sessions: [], totalSessions: 0 }]); },
+    updateStudent: async (studentId, data) => { setStudents(prev => prev.map(s => s.id === studentId ? { ...s, ...data } : s)); },
+    deleteStudent: async studentId => {
+      setStudents(prev => prev.filter(s => s.id !== studentId));
+      setAppointments(prev => prev.filter(a => a.studentId !== studentId));
+    },
+    importStudents: async list => { setStudents(prev => [...prev, ...list.map(s => ({ ...s, id: id(), role: 'student' as const, sessions: [], totalSessions: 0 }))]); },
+    addAdvisor: async a => { setAdvisors(prev => [...prev, { ...a, id: id(), role: 'advisor', availability: [] }]); },
+    updateAdvisor: async (advisorId, data) => { setAdvisors(prev => prev.map(a => a.id === advisorId ? { ...a, ...data } : a)); },
+    deleteAdvisor: async advisorId => { setAdvisors(prev => prev.filter(a => a.id !== advisorId)); },
+    updateAvailability: async (advisorId, availability) => { setAdvisors(prev => prev.map(a => a.id === advisorId ? { ...a, availability } : a)); },
+    addAppointment: async a => { setAppointments(prev => [...prev, { ...a, id: id(), createdAt: now() }]); },
+    updateAppointmentStatus: async (appointmentId, status, rejectionReason) => { setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status, rejectionReason } : a)); },
+    deleteAppointment: async appointmentId => { setAppointments(prev => prev.filter(a => a.id !== appointmentId)); },
+    addSession: async (studentId, session) => {
+      setStudents(prev => prev.map(s => s.id === studentId ? { ...s, sessions: [...s.sessions, { ...session, id: id() }], totalSessions: s.totalSessions + 1 } : s));
+    },
+    getStudentsByAdvisor: advisorId => students.filter(s => s.advisorId === advisorId),
+    getAppointmentsByAdvisor: advisorId => appointments.filter(a => a.advisorId === advisorId),
+    getAppointmentsByStudent: studentId => appointments.filter(a => a.studentId === studentId),
+    sendMessage: async msg => { setMessages(prev => [...prev, { ...msg, id: id(), createdAt: now(), isRead: false, replies: [] }]); },
+    replyToMessage: async (messageId, reply) => { setMessages(prev => prev.map(m => m.id === messageId ? { ...m, replies: [...m.replies, { ...reply, id: id(), createdAt: now() }] } : m)); },
+    getMessagesByUser: userId => messages.filter(m => m.senderId === userId || m.receiverId === userId),
+    getMessagesByDepartment: department => messages.filter(m => m.department === department),
+    markMessageAsRead: async messageId => { setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true } : m)); },
+    getUnreadCount: userId => messages.filter(m => (m.receiverId === userId || m.senderId === userId) && !m.isRead).length,
+  };
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
 
 export function useData() {

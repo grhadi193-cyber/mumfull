@@ -5,17 +5,17 @@ import { useToast } from '@/contexts/ToastContext';
 import { Eye, EyeOff, LogIn, GraduationCap, Shield, UserCheck, BookOpen, Brain, Users, Building2 } from 'lucide-react';
 
 const quickLogins = [
-  { label: 'مدیر سیستم', username: 'admin', password: 'admin123', icon: Shield, color: 'from-purple-600 to-purple-700', textColor: 'text-purple-700', bg: 'bg-purple-50 border-purple-200 hover:bg-purple-100' },
-  { label: 'استاد مشاور', username: 'advisor1', password: '123456', icon: UserCheck, color: 'from-blue-600 to-blue-700', textColor: 'text-blue-700', bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100' },
-  { label: 'دانشجو', username: 'student1', password: '123456', icon: GraduationCap, color: 'from-emerald-600 to-emerald-700', textColor: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' },
-  { label: 'مرکز مشاوره', username: 'counseling', password: '123456', icon: Brain, color: 'from-pink-600 to-pink-700', textColor: 'text-pink-700', bg: 'bg-pink-50 border-pink-200 hover:bg-pink-100' },
-  { label: 'مسئول آموزش', username: 'education', password: '123456', icon: BookOpen, color: 'from-teal-600 to-teal-700', textColor: 'text-teal-700', bg: 'bg-teal-50 border-teal-200 hover:bg-teal-100' },
-  { label: 'مسئول اساتید مشاور', username: 'supervisor', password: '123456', icon: Users, color: 'from-indigo-600 to-indigo-700', textColor: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100' },
-  { label: 'مدیر گروه', username: 'depthead', password: '123456', icon: Building2, color: 'from-amber-600 to-amber-700', textColor: 'text-amber-700', bg: 'bg-amber-50 border-amber-200 hover:bg-amber-100' },
+  { label: 'مدیر سیستم', username: 'admin', icon: Shield, color: 'from-purple-600 to-purple-700', textColor: 'text-purple-700', bg: 'bg-purple-50 border-purple-200 hover:bg-purple-100' },
+  { label: 'استاد مشاور', username: 'advisor1', icon: UserCheck, color: 'from-blue-600 to-blue-700', textColor: 'text-blue-700', bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100' },
+  { label: 'دانشجو', username: 'student1', icon: GraduationCap, color: 'from-emerald-600 to-emerald-700', textColor: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' },
+  { label: 'مرکز مشاوره', username: 'counseling', icon: Brain, color: 'from-pink-600 to-pink-700', textColor: 'text-pink-700', bg: 'bg-pink-50 border-pink-200 hover:bg-pink-100' },
+  { label: 'مسئول آموزش', username: 'education', icon: BookOpen, color: 'from-teal-600 to-teal-700', textColor: 'text-teal-700', bg: 'bg-teal-50 border-teal-200 hover:bg-teal-100' },
+  { label: 'مسئول اساتید مشاور', username: 'supervisor', icon: Users, color: 'from-indigo-600 to-indigo-700', textColor: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100' },
+  { label: 'مدیر گروه', username: 'depthead', icon: Building2, color: 'from-amber-600 to-amber-700', textColor: 'text-amber-700', bg: 'bg-amber-50 border-amber-200 hover:bg-amber-100' },
 ];
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, loginDemo } = useAuth();
   const { showToast } = useToast();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -35,15 +35,9 @@ export default function Login() {
     }
   };
 
-  const handleQuickLogin = async (u: string, p: string) => {
-    setLoading(true);
-    const result = await login(u, p);
-    setLoading(false);
-    if (result.success) {
-      showToast('ورود موفقیت‌آمیز بود', 'success');
-    } else {
-      showToast(result.message, 'error');
-    }
+  const handleQuickLogin = (username: string) => {
+    loginDemo(username);
+    showToast('ورود آزمایشی موفقیت‌آمیز بود', 'success');
   };
 
   return (
@@ -100,14 +94,14 @@ export default function Login() {
 
           {/* Quick Login Buttons */}
           <div className="border-t border-navy-100 pt-5">
-            <p className="text-xs text-navy-400 text-center mb-3">🔑 ورود آزمایشی:</p>
+            <p className="text-xs text-navy-400 text-center mb-3">🔑 ورود آزمایشی (بدون نیاز به سرور؛ داده‌ها در همین مرورگر ذخیره می‌شوند):</p>
             <div className="grid grid-cols-2 gap-2">
               {quickLogins.map((ql, i) => (
                 <motion.button
                   key={i}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => handleQuickLogin(ql.username, ql.password)}
+                  onClick={() => handleQuickLogin(ql.username)}
                   disabled={loading}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 ${ql.bg} ${ql.textColor}`}
                 >

@@ -1,10 +1,11 @@
-const BASE = "http://localhost:8000/api";
+import { storage } from '@/utils/storage';
+const BASE = "/api";
 
 export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = localStorage.getItem("token");
+  const token = storage.getItem("token");
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {

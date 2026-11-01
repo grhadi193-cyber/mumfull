@@ -63,7 +63,7 @@ const roleColors: Record<string, string> = {
 };
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, isDemo } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -88,6 +88,7 @@ export default function Layout({ children }: LayoutProps) {
 
   return (
     <div className="flex min-h-screen bg-navy-50" dir="rtl">
+      {isDemo && <div className="fixed bottom-3 left-3 z-50 rounded-lg bg-amber-100 px-3 py-2 text-xs font-bold text-amber-900 shadow">حالت آزمایشی · داده‌ها فقط در این مرورگر ذخیره می‌شوند</div>}
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex flex-col w-64 bg-white border-l border-navy-100 fixed h-full z-30">
         <div className="p-5 border-b border-navy-100">
